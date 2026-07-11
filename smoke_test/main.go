@@ -1,8 +1,8 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"net"
 )
@@ -31,31 +31,12 @@ func main() {
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
-	reader := bufio.NewReader(conn)
-
-	for {
-		b, err := reader.ReadByte()
-		if err != nil {
-			break
-		}
-		_, err = conn.Write([]byte{b})
-		if err != nil {
-			break
-		}
+	_, err := io.Copy(conn, conn)
+	if err != nil {
+		log.Println("Error copying:", err)
 	}
-
-	/*
-		bytes, err := reader.ReadBytes()
-		if err != nil {
-			log.Printf("Read error: %v", err)
-			return
-		}
-
-		_, err := conn.Write(bytes)
-		if err != nil {
-			log.Printf("Server write error: %v", err)
-		}
-	*/
 }
 
 // Based on https://gobyexample.com/tcp-server
+// and https://protohackers.com/help
+// PUZZLE: https://protohackers.com/problem/0
