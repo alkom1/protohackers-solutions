@@ -2,17 +2,20 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"log"
 	"net"
 )
 
 func main() {
-	listener, err := net.Listen("tcp", "0.0.0.0:9090")
+	listener, err := net.Listen("tcp", ":9090")
 	if err != nil {
 		log.Fatal("Error listening:", err)
 	}
 
 	defer listener.Close()
+
+	fmt.Println("Running...")
 
 	for {
 		conn, err := listener.Accept()
