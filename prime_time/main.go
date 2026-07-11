@@ -40,6 +40,8 @@ func handleConnection(conn net.Conn) {
 	reader := bufio.NewReader(conn)
 	text, err := reader.ReadString('\n')
 
+	fmt.Println(text)
+
 	if err != nil {
 		log.Println("Error reading line:", err)
 		return
@@ -52,7 +54,8 @@ func handleConnection(conn net.Conn) {
 	}
 
 	//method := dat["method"].(string)
-	number := dat["number"].(int)
+	numberFloat := dat["number"].(float64)
+	number := (int)(numberFloat)
 
 	res := &response{
 		Method: "isPrime",
