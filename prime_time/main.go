@@ -3,7 +3,9 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"log"
+	"math/big"
 	"net"
 	"strings"
 )
@@ -73,8 +75,8 @@ func handleConnection(conn net.Conn) {
 			return
 		}
 
-		var number int
-		if err := json.Unmarshal(req.NumberS, &number); err != nil {
+		number, err := parseBigInt(req.NumberS)
+		if err != nil {
 			log.Println("error int parsing:", err)
 			conn.Write([]byte("{}\n"))
 			return
@@ -82,7 +84,7 @@ func handleConnection(conn net.Conn) {
 
 		res := &response{
 			Method: "isPrime",
-			Prime:  isPrime(number),
+			Prime:  number.ProbablyPrime(20),
 		}
 		b, err := json.Marshal(res)
 		if err != nil {
@@ -99,16 +101,18 @@ func handleConnection(conn net.Conn) {
 	}
 }
 
-func isPrime(n int) bool {
-	if n <= 1 {
-		return false
+func parseBigInt(raw json.RawMessage) (*big.Int, error) {
+	// Reject JSON strings
+	if len(raw) == 0 || raw[0] == '"' {
+		return nil, fmt.Errorf("expected JSON number")
 	}
-	for i := 2; i*i <= n; i++ {
-		if n%i == 0 {
-			return false
-		}
-	}
-	return true
-} // https://www.geeksforgeeks.org/go-language/how-to-find-prime-number-in-golang/
 
-// Based on https://gobyexample.com/json
+	n, ok := new(big.Int).SetString(string(raw), 10)
+	if !ok {
+		return nil, fmt.Errorf("invalid integer")
+	}
+
+	return n, nil
+}
+
+// PUZZLE: https://protohackers.com/problem/1
