@@ -76,15 +76,18 @@ func handleConnection(conn net.Conn) {
 }
 
 func getMean(store []timestampedPrice, start int32, end int32) int32 {
-	startIndex := sort.Search(len(store), func(i int) bool { return store[i].Timestamp > start })
+	startIndex := sort.Search(len(store), func(i int) bool { return store[i].Timestamp >= start })
 	endIndex := sort.Search(len(store), func(i int) bool { return store[i].Timestamp > end })
 	log.Println("getMean", startIndex, endIndex)
 	l := endIndex - startIndex
-	s := 0
-	for i := startIndex; i < endIndex; i++ {
-		s += int(store[i].Price)
+	if l == 0 {
+		return 0
 	}
-	return int32(s / l)
+	var s int64 = 0
+	for i := startIndex; i < endIndex; i++ {
+		s += int64(store[i].Price)
+	}
+	return int32(s / int64(l))
 }
 
 func insert(s []timestampedPrice, item timestampedPrice) []timestampedPrice {
