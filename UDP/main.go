@@ -3,7 +3,10 @@ package main
 import (
 	"log"
 	"net"
+	"strings"
 )
+
+var db = make(map[string]string)
 
 func main() {
 	udpAddr, err := net.ResolveUDPAddr("udp", ":9904")
@@ -15,20 +18,44 @@ func main() {
 		log.Fatal("Error listening:", err)
 	}
 
+	db["version"] = "Alk's UDP database 1.0"
 	log.Println("Running...")
 	defer conn.Close()
 
+	// we might have to setup goroutines for reading
+	// https://ops.tips/blog/udp-client-and-server-in-go/#a-udp-server-in-go
+	buf := make([]byte, 1024)
 	for {
-		var buf [512]byte
-		_, addr, err := conn.ReadFromUDP(buf[0:])
+		n, addr, err := conn.ReadFromUDP(buf)
 		if err != nil {
 			log.Println(err)
 			return
 		}
 
-		conn.WriteToUDP([]byte("hi\n"), addr)
+		res := handle(string(buf[:n]))
+		if len(res) > 0 {
+			conn.WriteToUDP([]byte(res), addr)
+		}
 	}
+}
 
+func handle(req string) string {
+	index := strings.Index(req, "=")
+
+	if index > 0 {
+		// Insert
+		key := req[:index]
+		value := req[index+1:]
+		if key != "version" {
+			log.Println("insert", key, value)
+			db[key] = value
+		}
+		return ""
+	}
+	// Query
+	value := db[req]
+	log.Println("query", req, value)
+	return value
 }
 
 // PUZZLE: https://protohackers.com/problem/4
