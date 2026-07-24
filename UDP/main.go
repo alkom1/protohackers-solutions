@@ -40,7 +40,7 @@ func main() {
 }
 
 func handle(req string) string {
-	req = strings.TrimSpace(req)
+	// req = strings.TrimSpace(req)
 	index := strings.Index(req, "=")
 
 	if index > 0 {
