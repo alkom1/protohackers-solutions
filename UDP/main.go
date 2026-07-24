@@ -40,6 +40,7 @@ func main() {
 }
 
 func handle(req string) string {
+	req = strings.TrimSpace(req)
 	index := strings.Index(req, "=")
 
 	if index > 0 {
@@ -55,7 +56,7 @@ func handle(req string) string {
 	// Query
 	value := db[req]
 	log.Println("query", req, value)
-	return value
+	return req + "=" + value
 }
 
 // PUZZLE: https://protohackers.com/problem/4
