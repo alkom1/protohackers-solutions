@@ -22,8 +22,7 @@ func main() {
 	log.Println("Running...")
 	defer conn.Close()
 
-	// we might have to setup goroutines for reading
-	// https://ops.tips/blog/udp-client-and-server-in-go/#a-udp-server-in-go
+	// goroutines?
 	buf := make([]byte, 1024)
 	for {
 		n, addr, err := conn.ReadFromUDP(buf)
@@ -40,26 +39,20 @@ func main() {
 }
 
 func handle(req string) string {
-	// req = strings.TrimSpace(req)
-	index := strings.Index(req, "=")
+	before, after, ok0 := strings.Cut(req, "=")
 
-	if index > -1 {
+	if ok0 {
 		// Insert
-		key := req[:index]
-		value := req[index+1:]
-		if key != "version" {
-			log.Println("insert", key, value)
-			db[key] = value
+		if before != "version" {
+			// log.Println("insert", key, value)
+			db[before] = after
 		}
 		return ""
 	}
 	// Query
-	value, ok := db[req]
-	log.Println("query", req, ok, value)
-	if ok {
-		return req + "=" + value
-	}
-	return ""
+	value := db[req]
+	// log.Println("query", req, ok, value)
+	return req + "=" + value
 }
 
 // PUZZLE: https://protohackers.com/problem/4
