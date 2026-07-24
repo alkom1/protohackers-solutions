@@ -43,7 +43,7 @@ func handle(req string) string {
 	// req = strings.TrimSpace(req)
 	index := strings.Index(req, "=")
 
-	if index > 0 {
+	if index > -1 {
 		// Insert
 		key := req[:index]
 		value := req[index+1:]
@@ -54,9 +54,12 @@ func handle(req string) string {
 		return ""
 	}
 	// Query
-	value := db[req]
-	log.Println("query", req, value)
-	return req + "=" + value
+	value, ok := db[req]
+	log.Println("query", req, ok, value)
+	if ok {
+		return req + "=" + value
+	}
+	return ""
 }
 
 // PUZZLE: https://protohackers.com/problem/4
