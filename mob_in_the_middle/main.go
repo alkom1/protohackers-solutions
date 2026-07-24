@@ -32,8 +32,6 @@ func main() {
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
-	// for starters:
-	// mirror all messages 1:1
 	upstreamAddr, err := net.ResolveTCPAddr("tcp", "chat.protohackers.com:16963")
 	if err != nil {
 		log.Fatal(err)
@@ -51,26 +49,26 @@ func handleConnection(conn net.Conn) {
 
 	// sub-goroutine for reading from the client
 	go func() {
-		scanner := bufio.NewScanner(conn)
-		for scanner.Scan() {
-			line := scanner.Text()
+		reader := bufio.NewReader(conn)
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				break
+			}
 			fromUser <- line
-		}
-		if err := scanner.Err(); err != nil {
-			log.Println(err)
 		}
 		end <- struct{}{}
 	}()
 
 	// sub-goroutine for reading from the upstream
 	go func() {
-		scanner := bufio.NewScanner(upstreamConn)
-		for scanner.Scan() {
-			line := scanner.Text()
+		reader := bufio.NewReader(upstreamConn)
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				break
+			}
 			fromServer <- line
-		}
-		if err := scanner.Err(); err != nil {
-			log.Println(err)
 		}
 		end <- struct{}{}
 	}()
@@ -78,28 +76,27 @@ func handleConnection(conn net.Conn) {
 	for {
 		select {
 		case fU := <-fromUser:
-			log.Println("user->server:", fU)
-			fmt.Fprintf(upstreamConn, "%s\n", rewriteAddresses(fU))
+			log.Print("user->server:", fU)
+			fmt.Fprint(upstreamConn, rewriteAddresses(fU))
 		case fS := <-fromServer:
-			log.Println("server->user:", fS)
-			fmt.Fprintf(conn, "%s\n", rewriteAddresses(fS))
+			log.Print("server->user:", fS)
+			fmt.Fprint(conn, rewriteAddresses(fS))
 		case _ = <-end:
 			return
 		}
 	}
-
-	// later:
-	//  detect b-addresses (regex?)
-	//  replace them
 }
 
 func rewriteAddresses(src string) string {
-	parts := strings.Split(src, " ")
+	trimmed := strings.TrimRight(src, " \t\r\n")
+	suffix := src[len(trimmed):]
+	parts := strings.Split(trimmed, " ")
 	for i, s := range parts {
 		if len(s) > 0 && s[0] == '7' && len(s) >= 26 && len(s) <= 35 {
 			parts[i] = "7YWHMfk9JZe0LM0g1ZauHuiSxhI"
 		}
 	}
+	parts[len(parts)-1] += suffix
 	return strings.Join(parts, " ")
 }
 
