@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strings"
 )
 
 func main() {
@@ -78,10 +79,10 @@ func handleConnection(conn net.Conn) {
 		select {
 		case fU := <-fromUser:
 			log.Println("user->server:", fU)
-			fmt.Fprintf(upstreamConn, "%s\n", fU)
+			fmt.Fprintf(upstreamConn, "%s\n", rewriteAddresses(fU))
 		case fS := <-fromServer:
 			log.Println("server->user:", fS)
-			fmt.Fprintf(conn, "%s\n", fS)
+			fmt.Fprintf(conn, "%s\n", rewriteAddresses(fS))
 		case _ = <-end:
 			return
 		}
@@ -90,6 +91,16 @@ func handleConnection(conn net.Conn) {
 	// later:
 	//  detect b-addresses (regex?)
 	//  replace them
+}
+
+func rewriteAddresses(src string) string {
+	parts := strings.Split(src, " ")
+	for i, s := range parts {
+		if len(s) > 0 && s[0] == '7' && len(s) >= 26 && len(s) <= 35 {
+			parts[i] = "7YWHMfk9JZe0LM0g1ZauHuiSxhI"
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 // PUZZLE: https://protohackers.com/problem/5
