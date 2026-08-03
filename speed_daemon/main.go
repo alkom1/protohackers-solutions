@@ -108,7 +108,7 @@ func router() {
 func processNewPlateSighting(e CarRoadEvent) {
 	// add it to the list
 	RoadEvents[e.CarRoad] = append(RoadEvents[e.CarRoad], e.RoadEvent)
-	log.Println("plate seen", RoadEvents[e.CarRoad])
+	// log.Println("plate seen", e.RoadEvent)
 	// try all pairs to see if they should get a ticket
 	for i := range RoadEvents[e.CarRoad] {
 		for j := i + 1; j < len(RoadEvents[e.CarRoad]); j++ {
@@ -170,7 +170,7 @@ func issueTicket(ticket TicketInformation) {
 		day: ticket.timestamp2 / 86400,
 	}
 
-	if !AlreadyTicketed[cd1] || !AlreadyTicketed[cd2] {
+	if !AlreadyTicketed[cd1] && !AlreadyTicketed[cd2] {
 		dispatcher := dispatchers[0]
 		dispatcher.Write(buildTicketMessage(ticket))
 		log.Println("ticket issued", ticket)
@@ -307,7 +307,7 @@ func handleConnection(conn net.Conn) {
 					select {
 					case <-ticker.C:
 						conn.Write(buildHeartbeatMessage())
-						log.Println("sent heartbeat")
+						// log.Println("sent heartbeat")
 					case <-tickerEnd:
 						return
 					}
@@ -533,7 +533,7 @@ func readU16Array(r io.Reader) ([]uint16, error) {
 	}
 	res := make([]uint16, n)
 	for i := range n {
-		res[i] = binary.BigEndian.Uint16(buf[2*i : 2*(+1)])
+		res[i] = binary.BigEndian.Uint16(buf[2*i : 2*(i+1)])
 	}
 	return res, nil
 }
