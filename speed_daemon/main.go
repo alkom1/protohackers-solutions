@@ -156,7 +156,7 @@ func issueTicket(ticket TicketInformation) {
 	if !r || len(dispatchers) == 0 {
 		// dispatcher not found, add it to q
 		q := ticketQ[ticket.road]
-		ticketQ[ticket.road] = append(q, ticket) // FIXME: nil slice
+		ticketQ[ticket.road] = append(q, ticket)
 		return
 	}
 
@@ -170,19 +170,44 @@ func issueTicket(ticket TicketInformation) {
 		day: ticket.timestamp2 / 86400,
 	}
 
-	if !AlreadyTicketed[cd1] {
+	if !AlreadyTicketed[cd1] || !AlreadyTicketed[cd2] {
 		dispatcher := dispatchers[0]
 		dispatcher.Write(buildTicketMessage(ticket))
 		log.Println("ticket issued", ticket)
 		AlreadyTicketed[cd1] = true
-	}
-
-	if !AlreadyTicketed[cd2] {
-		dispatcher := dispatchers[0]
-		dispatcher.Write(buildTicketMessage(ticket))
-		log.Println("ticket issued", ticket)
 		AlreadyTicketed[cd2] = true
 	}
+
+	/*
+		if cd1 == cd2 && !AlreadyTicketed[cd1] {
+			// observation starts and ends on same day
+			dispatcher := dispatchers[0]
+			dispatcher.Write(buildTicketMessage(ticket))
+			log.Println("same day ticket issued", ticket)
+			AlreadyTicketed[cd1] = true
+			return
+		}
+		if !AlreadyTicketed[cd1] {
+			// first day of two day ticket
+			dispatcher := dispatchers[0]
+			origEnd := ticket.timestamp2
+			ticket.timestamp2 = (cd1.day + 1) * 86400
+			dispatcher.Write(buildTicketMessage(ticket))
+			log.Println("ticket issued (day one)", ticket)
+			AlreadyTicketed[cd1] = true
+			ticket.timestamp2 = origEnd
+			return
+		}
+
+		if !AlreadyTicketed[cd2] {
+			// second day of two day ticket
+			dispatcher := dispatchers[0]
+			ticket.timestamp1 = cd2.day * 86400
+			dispatcher.Write(buildTicketMessage(ticket))
+			log.Println("ticket issued (day two)", ticket)
+			AlreadyTicketed[cd2] = true
+		}
+	*/
 }
 
 func calculateSpeed(e RoadEvent, o RoadEvent) uint16 {
