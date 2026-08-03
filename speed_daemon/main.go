@@ -90,9 +90,11 @@ func router() {
 			}
 
 		case r := <-roads: // just note down the road speed limit
-			RoadLimits[r.road] = r.limit
+			log.Println("road speed limit", r.road, r.limit)
+			RoadLimits[r.road] = r.limit * 100
 
 		case d := <-dispatcherDC: // dispatcher client disconnected
+			log.Println("dispatcher disconnected", d.roads)
 			for _, r := range d.roads {
 				TicketDispatchers[r] = slices.DeleteFunc(TicketDispatchers[r], func(x net.Conn) bool {
 					return x == d.conn
@@ -106,6 +108,7 @@ func router() {
 func processNewPlateSighting(e CarRoadEvent) {
 	// add it to the list
 	RoadEvents[e.CarRoad] = append(RoadEvents[e.CarRoad], e.RoadEvent)
+	log.Println("plate seen", RoadEvents[e.CarRoad])
 	// try all pairs to see if they should get a ticket
 	for i := range RoadEvents[e.CarRoad] {
 		for j := i + 1; j < len(RoadEvents[e.CarRoad]); j++ {
@@ -170,12 +173,14 @@ func issueTicket(ticket TicketInformation) {
 	if !AlreadyTicketed[cd1] {
 		dispatcher := dispatchers[0]
 		dispatcher.Write(buildTicketMessage(ticket))
+		log.Println("ticket issued", ticket)
 		AlreadyTicketed[cd1] = true
 	}
 
 	if !AlreadyTicketed[cd2] {
 		dispatcher := dispatchers[0]
 		dispatcher.Write(buildTicketMessage(ticket))
+		log.Println("ticket issued", ticket)
 		AlreadyTicketed[cd2] = true
 	}
 }
@@ -191,7 +196,7 @@ func calculateSpeed(e RoadEvent, o RoadEvent) uint16 {
 	if smallerMile > largerMile {
 		smallerMile, largerMile = largerMile, smallerMile
 	}
-	return (largerMile - smallerMile) * 3600 / uint16(largerTimestamp-smallerTimestamp)
+	return uint16(uint32(largerMile-smallerMile) * 360000 / (largerTimestamp - smallerTimestamp))
 }
 
 const (
@@ -226,6 +231,7 @@ func handleConnection(conn net.Conn) {
 				road:  m.road,
 				limit: m.limit,
 			}
+			log.Println("Client identified as camera.")
 		case *MessageIAmDispatcher:
 			if client_type != UNKNOWN {
 				conn.Write(buildErrorMessage("you already selected type"))
@@ -236,6 +242,7 @@ func handleConnection(conn net.Conn) {
 				roads: m.roads,
 				conn:  conn,
 			}
+			log.Println("Client identified as dispatcher.")
 			defer func() {
 				dispatcherDC <- DispatcherSubscription{
 					roads: m.roads,
@@ -263,6 +270,7 @@ func handleConnection(conn net.Conn) {
 				break
 			}
 			heartbeat_interval = int(m.interval)
+			log.Println("heartbeat interval request", heartbeat_interval)
 			ticker := time.NewTicker(time.Duration(heartbeat_interval * 100 * 1000))
 			tickerEnd := make(chan struct{})
 			go func() {
@@ -398,7 +406,7 @@ func buildTicketMessage(ticket TicketInformation) []byte {
 	if n == 0 || n > 255 {
 		log.Fatal("plate number empty or too long")
 	}
-	buf := make([]byte, n+14)
+	buf := make([]byte, n+18)
 	buf[0] = 0x21
 	buf[1] = uint8(n)
 	for i := range n {
@@ -407,9 +415,9 @@ func buildTicketMessage(ticket TicketInformation) []byte {
 	binary.BigEndian.PutUint16(buf[n+2:], ticket.road)
 	binary.BigEndian.PutUint16(buf[n+4:], ticket.mile1)
 	binary.BigEndian.PutUint32(buf[n+6:], ticket.timestamp1)
-	binary.BigEndian.PutUint16(buf[n+8:], ticket.mile2)
-	binary.BigEndian.PutUint32(buf[n+10:], ticket.timestamp2)
-	binary.BigEndian.PutUint16(buf[n+12:], ticket.speed)
+	binary.BigEndian.PutUint16(buf[n+10:], ticket.mile2)
+	binary.BigEndian.PutUint32(buf[n+12:], ticket.timestamp2)
+	binary.BigEndian.PutUint16(buf[n+16:], ticket.speed)
 	return buf
 }
 
