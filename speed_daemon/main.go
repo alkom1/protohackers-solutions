@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -240,6 +239,8 @@ func handleConnection(conn net.Conn) {
 	for {
 		msg, err := buildMsg(conn)
 		if err != nil {
+			log.Println(err)
+			conn.Write(buildErrorMessage(err.Error()))
 			conn.Write(buildErrorMessage("you did an oopsie"))
 			break
 		}
@@ -461,7 +462,7 @@ func ReadU8(r io.Reader) (uint8, error) {
 		return 0, err
 	}
 	if n < 1 {
-		return 0, errors.New("0 bytes read")
+		return 0, fmt.Errorf("0 bytes read")
 	}
 	return uint8(buf[0]), nil
 }
@@ -473,7 +474,7 @@ func ReadU16(r io.Reader) (uint16, error) {
 		return 0, err
 	}
 	if n < 2 {
-		return 0, errors.New("less than 2 bytes read")
+		return 0, fmt.Errorf("less than 2 bytes read")
 	}
 	val := binary.BigEndian.Uint16(buf)
 	return val, nil
@@ -486,7 +487,7 @@ func ReadU32(r io.Reader) (uint32, error) {
 		return 0, err
 	}
 	if n < 4 {
-		return 0, errors.New("less than 4 bytes read")
+		return 0, fmt.Errorf("less than 4 bytes read")
 	}
 	val := binary.BigEndian.Uint32(buf)
 	return val, nil
@@ -499,7 +500,7 @@ func ReadString(r io.Reader) (s string, e error) {
 		return
 	}
 	if l == 0 {
-		e = errors.New("zero length string")
+		e = fmt.Errorf("zero length string")
 		return
 	}
 	buf := make([]byte, l)
@@ -508,7 +509,7 @@ func ReadString(r io.Reader) (s string, e error) {
 		return
 	}
 	if n < int(l) {
-		e = errors.New("couldn't read full string")
+		e = fmt.Errorf("couldn't read full string")
 		return
 	}
 	s = string(buf)
@@ -521,7 +522,8 @@ func readU16Array(r io.Reader) ([]uint16, error) {
 		return nil, err
 	}
 	if n == 0 {
-		return nil, fmt.Errorf("empty array")
+		//return nil, fmt.Errorf("empty array")
+		return make([]uint16, 0), nil
 	}
 	buf := make([]byte, 2*n)
 	bytesRead, err := io.ReadFull(r, buf)
