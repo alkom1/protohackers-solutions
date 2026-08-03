@@ -209,7 +209,7 @@ func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
 	client_type := UNKNOWN
-	heartbeat_interval := 0
+	heartbeat_interval := -1
 	var camera_info *MessageIAmCamera = nil
 
 	for {
@@ -265,26 +265,30 @@ func handleConnection(conn net.Conn) {
 				},
 			}
 		case *MessageWantHeartbeat:
-			if heartbeat_interval != 0 {
+			if heartbeat_interval != -1 {
 				conn.Write(buildErrorMessage("you already said this"))
 				break
 			}
 			heartbeat_interval = int(m.interval)
 			log.Println("heartbeat interval request", heartbeat_interval)
-			ticker := time.NewTicker(time.Duration(heartbeat_interval * 100 * 1000))
+			if heartbeat_interval <= 0 {
+				continue
+			}
+			ticker := time.NewTicker(time.Duration(heartbeat_interval) * 100 * time.Millisecond)
 			tickerEnd := make(chan struct{})
 			go func() {
+				defer ticker.Stop()
 				for {
 					select {
-					case _ = <-ticker.C:
+					case <-ticker.C:
 						conn.Write(buildHeartbeatMessage())
-					case _ = <-tickerEnd:
-						ticker.Stop()
+						log.Println("sent heartbeat")
+					case <-tickerEnd:
 						return
 					}
 				}
 			}()
-			defer func() { tickerEnd <- struct{}{} }()
+			defer close(tickerEnd)
 		}
 	}
 }
