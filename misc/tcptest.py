@@ -18,11 +18,17 @@ MODE = "sequential"
 # Time to keep connections open after the last payload was sent
 RESPONSE_WAIT_SECONDS = 5
 
+# reversebits: 01
+# xor N: 02 NN
+# xorpos: 03
+# add N: 04 NN
+# add pos: 05
+# end: 00
 
 CLIENTS = [
 	{
 		"name": "Test",
-		"payload_hex": "02 7b 05 01 00 f2 20 ba 44 18 84 ba aa d0 26 44 a4 a8 7e 6a 48 d6 58 34 44 d6 7a 98 4e 0c cc 94 31",
+		"payload_hex": "01 01 02 00 01 01 04 00 02 2d 03 02 86 02 ab 03 02 00 04 3e 04 62 04 d7 04 a6 04 72 04 71 00",
 		"keep_connected": True,
 	},
 ]

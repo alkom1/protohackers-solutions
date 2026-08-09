@@ -125,33 +125,58 @@ func processLine(s string) string {
 // CIPHER STUFF
 
 func ParseCipherSpec(r io.Reader) (*Node, error) {
-	x := Var()
+	x := &Node{
+		Kind: KindVariable,
+	}
 	for {
 		b, err := ReadU8(r)
 		if err != nil {
 			return nil, err
 		}
 		switch b {
-		case uint8(OpInvalid):
+		case 0: // end
 			return x, nil
-		case uint8(OpReverseBits):
-			x = Call(OpReverseBits, x, 0)
-		case uint8(OpXorN):
+		case 1: // reverse bits
+			x = &Node{
+				Kind: KindOperation,
+				Op:   OpReverseBits,
+				Next: x,
+			}
+		case 2: // xor n
 			n, err := ReadU8(r)
 			if err != nil {
 				log.Fatal(err)
 			}
-			x = Call(OpXorN, x, n)
-		case uint8(OpXorPos):
-			x = Call(OpXorPos, x, 0)
-		case uint8(OpAddN):
+			x = &Node{
+				Kind: KindOperation,
+				Op:   OpXor,
+				Arg:  n,
+				Next: x,
+			}
+		case 3: // xor pos
+			x = &Node{
+				Kind: KindOperation,
+				Op:   OpXor,
+				Pos:  1,
+				Next: x,
+			}
+		case 4: // add n
 			n, err := ReadU8(r)
 			if err != nil {
 				log.Fatal(err)
 			}
-			x = Call(OpAddN, x, n)
-		case uint8(OpAddPos):
-			x = Call(OpAddPos, x, 0)
+			x = &Node{
+				Kind: KindOperation,
+				Op:   OpAddN,
+				Arg:  n,
+				Next: x,
+			}
+		case 5: // add pos
+			x = &Node{
+				Kind: KindOperation,
+				Op:   OpAddPos,
+				Next: x,
+			}
 		default:
 			log.Fatal("unknown op", b)
 		}
@@ -170,7 +195,7 @@ func SimplifyCipherSpec(n *Node) *Node {
 	n.Next = SimplifyCipherSpec(n.Next)
 
 	// zero XORs disappear
-	if n.Op == OpXorN && n.Arg == 0 {
+	if n.Op == OpXor && n.Arg == 0 && n.Pos == 0 {
 		return n.Next
 	}
 	// zero additions disappear
@@ -184,12 +209,23 @@ func SimplifyCipherSpec(n *Node) *Node {
 
 	// multiple additions in a row combine
 	if n.Op == OpAddN && n.Next.Op == OpAddN {
-		return SimplifyCipherSpec(Call(OpAddN, n.Next.Next, n.Arg+n.Next.Arg))
+		return SimplifyCipherSpec(&Node{
+			Kind: KindOperation,
+			Op:   OpAddN,
+			Next: n.Next.Next,
+			Arg:  n.Arg + n.Next.Arg,
+		})
 	}
 
 	// multiple XORs in a row combine
-	if n.Op == OpXorN && n.Next.Op == OpXorN {
-		return SimplifyCipherSpec(Call(OpXorN, n.Next.Next, n.Arg^n.Next.Arg))
+	if n.Op == OpXor && n.Next.Op == OpXor {
+		return SimplifyCipherSpec(&Node{
+			Kind: KindOperation,
+			Op:   OpXor,
+			Next: n.Next.Next,
+			Arg:  n.Arg ^ n.Next.Arg,
+			Pos:  n.Pos ^ n.Next.Pos,
+		})
 	}
 
 	// two reversebits in a row disappear
@@ -210,10 +246,11 @@ func EncryptByte(b byte, c *Node, p byte) byte {
 	switch c.Op {
 	case OpReverseBits:
 		return reverseBits(b)
-	case OpXorN:
+	case OpXor:
+		if c.Pos > 0 {
+			b = b ^ p
+		}
 		return b ^ c.Arg
-	case OpXorPos:
-		return b ^ p
 	case OpAddN:
 		return b + c.Arg
 	case OpAddPos:
@@ -231,10 +268,11 @@ func DecryptByte(b byte, c *Node, p byte) byte {
 	switch c.Op {
 	case OpReverseBits:
 		b = reverseBits(b)
-	case OpXorN:
+	case OpXor:
+		if c.Pos > 0 {
+			b = b ^ p
+		}
 		b = b ^ c.Arg
-	case OpXorPos:
-		b = b ^ p
 	case OpAddN:
 		b = b - c.Arg
 	case OpAddPos:
@@ -280,8 +318,7 @@ type Op uint8
 const (
 	OpInvalid Op = iota
 	OpReverseBits
-	OpXorN
-	OpXorPos
+	OpXor
 	OpAddN
 	OpAddPos
 )
@@ -292,52 +329,8 @@ type Node struct {
 	Op   Op
 	Next *Node
 
-	Arg uint8
-}
-
-type OpInfo struct {
-	name  string
-	Arity uint8
-}
-
-var Operations = [...]OpInfo{
-	OpInvalid:     {"<invalid>", 0},
-	OpReverseBits: {"ReverseBits", 1},
-	OpXorN:        {"XorN", 2},
-	OpXorPos:      {"XorPos", 1},
-	OpAddN:        {"AddN", 2},
-	OpAddPos:      {"AddPos", 1},
-}
-
-func Var() *Node {
-	return &Node{
-		Kind: KindVariable,
-	}
-}
-
-func Call(op Op, next *Node, arg uint8) *Node {
-	info := Operations[op]
-
-	switch info.Arity {
-	case 0:
-		return nil
-	case 1:
-		return &Node{
-			Kind: KindOperation,
-			Op:   op,
-			Next: next,
-		}
-	case 2:
-		return &Node{
-			Kind: KindOperation,
-			Op:   op,
-			Arg:  arg,
-			Next: next,
-		}
-	}
-
-	log.Fatal("invalid operation arity")
-	return nil
+	Pos uint8 // for xor pos
+	Arg uint8 // for xor n, add n
 }
 
 // how many goroutines per connection?
