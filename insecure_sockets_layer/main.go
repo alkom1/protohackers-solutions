@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"log"
 	"net"
+	"strconv"
+	"strings"
 )
 
 func main() {
@@ -28,8 +31,40 @@ func main() {
 	}
 }
 
-type ISLStream struct {
-	io.ReadWriteCloser
+type EncryptedStream struct {
+	src    io.ReadWriteCloser
+	spec   *Node
+	inPos  byte
+	outPos byte
+}
+
+func (r *EncryptedStream) Read(p []byte) (int, error) {
+	// Read reads up to len(p) bytes into p. Returns number of bytes read and any error encountered.
+	n, err := r.src.Read(p)
+	if err != nil {
+		return 0, err
+	}
+
+	for i := range n {
+		p[i] = DecryptByte(p[i], r.spec, r.inPos)
+		r.inPos += 1
+	}
+
+	return n, nil
+}
+
+func (r *EncryptedStream) Write(p []byte) (int, error) {
+	buf := make([]byte, len(p))
+	for i, b := range p {
+		buf[i] = EncryptByte(b, r.spec, r.outPos)
+		r.outPos += 1
+	}
+
+	return r.src.Write(buf) // this can fail and cause desync
+}
+
+func (r *EncryptedStream) Close() error {
+	return r.src.Close()
 }
 
 func handleConnection(conn net.Conn) {
@@ -45,15 +80,49 @@ func handleConnection(conn net.Conn) {
 	cipher = SimplifyCipherSpec(cipher)
 	// 3. if the cipher spec simplifies to no-op, close the connection
 	if cipher.Kind == KindVariable {
+		log.Println("no-op cipher spec")
 		return
 	}
-	// 4. build and remember the reverse of the cipher spec
 
-	// 1. receive message from connection -> decrypt it -> send it to the application layer
-	// 2. receive payload from application layer -> encrypt it -> send it through the channel
-	// how many goroutines per connection?
-	//  1? ignore the separation into layers
+	encryptedStream := &EncryptedStream{
+		src:  conn,
+		spec: cipher,
+	}
+
+	scanner := bufio.NewScanner(encryptedStream)
+	for scanner.Scan() {
+		line := scanner.Text()
+		order := processLine(line)
+		fmt.Fprintf(encryptedStream, "%s\n", order)
+	}
+	if err := scanner.Err(); err != nil {
+		log.Println(err)
+	}
 }
+
+func processLine(s string) string {
+	split := strings.Split(s, ",")
+
+	largest := 0
+	largestName := ""
+	for _, t := range split {
+		cStr, _, found := strings.Cut(t, "x")
+		if !found {
+			log.Fatal("x not found")
+		}
+		c, err := strconv.Atoi(cStr)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if c > largest {
+			largest = c
+			largestName = t
+		}
+	}
+	return largestName
+}
+
+// CIPHER STUFF
 
 func ParseCipherSpec(r io.Reader) (*Node, error) {
 	x := Var()
@@ -115,12 +184,12 @@ func SimplifyCipherSpec(n *Node) *Node {
 
 	// multiple additions in a row combine
 	if n.Op == OpAddN && n.Next.Op == OpAddN {
-		return Call(OpAddN, n.Next.Next, n.Arg+n.Next.Arg)
+		return SimplifyCipherSpec(Call(OpAddN, n.Next.Next, n.Arg+n.Next.Arg))
 	}
 
 	// multiple XORs in a row combine
 	if n.Op == OpXorN && n.Next.Op == OpXorN {
-		return Call(OpXorN, n.Next.Next, n.Arg^n.Next.Arg)
+		return SimplifyCipherSpec(Call(OpXorN, n.Next.Next, n.Arg^n.Next.Arg))
 	}
 
 	// two reversebits in a row disappear
@@ -129,6 +198,58 @@ func SimplifyCipherSpec(n *Node) *Node {
 	}
 
 	return n
+}
+
+func EncryptByte(b byte, c *Node, p byte) byte {
+	if c == nil || c.Kind == KindVariable {
+		return b
+	}
+
+	b = EncryptByte(b, c.Next, p)
+
+	switch c.Op {
+	case OpReverseBits:
+		return reverseBits(b)
+	case OpXorN:
+		return b ^ c.Arg
+	case OpXorPos:
+		return b ^ p
+	case OpAddN:
+		return b + c.Arg
+	case OpAddPos:
+		return b + p
+	}
+
+	return b
+}
+
+func DecryptByte(b byte, c *Node, p byte) byte {
+	if c == nil || c.Kind == KindVariable {
+		return b
+	}
+
+	switch c.Op {
+	case OpReverseBits:
+		b = reverseBits(b)
+	case OpXorN:
+		b = b ^ c.Arg
+	case OpXorPos:
+		b = b ^ p
+	case OpAddN:
+		b = b - c.Arg
+	case OpAddPos:
+		b = b - p
+	}
+
+	return DecryptByte(b, c.Next, p)
+}
+
+func reverseBits(b byte) byte {
+	var r byte
+	for i := range 8 {
+		r |= ((b >> i) & 1) << (7 - i)
+	}
+	return r
 }
 
 // MISC
@@ -204,12 +325,14 @@ func Call(op Op, next *Node, arg uint8) *Node {
 		return &Node{
 			Kind: KindOperation,
 			Op:   op,
+			Next: next,
 		}
 	case 2:
 		return &Node{
 			Kind: KindOperation,
 			Op:   op,
 			Arg:  arg,
+			Next: next,
 		}
 	}
 

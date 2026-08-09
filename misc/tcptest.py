@@ -10,7 +10,7 @@ import time
 # =========================
 
 SERVER_HOST = "127.0.0.1"
-SERVER_PORT = 9906
+SERVER_PORT = 9908
 
 # "sequential" or "parallel"
 MODE = "sequential"
@@ -21,20 +21,10 @@ RESPONSE_WAIT_SECONDS = 5
 
 CLIENTS = [
 	{
-		"name": "Camera@8",
-		"payload_hex": "80 00 7b 00 08 00 3c 20 04 55 4e 31 58 00 00 00 00",
+		"name": "Test",
+		"payload_hex": "02 7b 05 01 00 f2 20 ba 44 18 84 ba aa d0 26 44 a4 a8 7e 6a 48 d6 58 34 44 d6 7a 98 4e 0c cc 94 31",
 		"keep_connected": True,
 	},
-	{
-		"name": "Camera@9",
-		"payload_hex": "80 00 7b 00 09 00 3c 20 04 55 4e 31 58 00 00 00 2d",
-		"keep_connected": True,
-	},
-	{
-		"name": "Dispatcher",
-		"payload_hex": "81 01 00 7b",
-		"keep_connected": True,
-		},
 ]
 
 
