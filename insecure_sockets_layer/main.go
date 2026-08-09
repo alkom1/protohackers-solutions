@@ -10,6 +10,11 @@ import (
 	"strings"
 )
 
+// I'll be honest, this code ended up being way more messy than I expected
+// The cipher simplification had couple tricky edge cases
+// that I didn't anticipate and had to kinda hack on afterwards
+// but at the same time, it could have ended up much worse
+
 func main() {
 	listener, err := net.Listen("tcp", ":9908")
 	if err != nil {
@@ -39,7 +44,6 @@ type EncryptedStream struct {
 }
 
 func (r *EncryptedStream) Read(p []byte) (int, error) {
-	// Read reads up to len(p) bytes into p. Returns number of bytes read and any error encountered.
 	n, err := r.src.Read(p)
 	if err != nil {
 		return 0, err
@@ -84,6 +88,7 @@ func handleConnection(conn net.Conn) {
 		return
 	}
 
+	// application layer stuff
 	encryptedStream := &EncryptedStream{
 		src:  conn,
 		spec: cipher,
@@ -207,6 +212,10 @@ func SimplifyCipherSpec(n *Node) *Node {
 		return n
 	}
 
+	// if there's "reverse bits" to the left of XOR
+	// swap their order
+	// this allows us to get all XORs/REVs together
+	// and cancel them out
 	if n.Op == OpReverseBits && n.Next.Op == OpXor && n.Next.Pos == 0 {
 		return SimplifyCipherSpec(&Node{
 			Kind: KindOperation,
@@ -345,11 +354,5 @@ type Node struct {
 	Pos uint8 // for xor pos
 	Arg uint8 // for xor n, add n
 }
-
-// how many goroutines per connection?
-//  1? ignore the separation into layers
-//  2? one low level, one application layer
-//  2? one for each direction
-//  3? low level one for each direction, application layer only one
 
 // PUZZLE: https://protohackers.com/problem/8

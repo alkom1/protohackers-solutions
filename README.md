@@ -35,6 +35,10 @@
 - [text](https://protohackers.com/problem/7)
 - [solution](line_reversal/main.go)
 
+### Puzzle 8: Insecure sockets layer
+- [text](https://protohackers.com/problem/8)
+- [solution](insecure_sockets_layer/main.go)
+
 ## Disclaimer
 I am learning golang while writing these. The code quality is not ideal. Do not use this as learning material.
 
