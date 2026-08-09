@@ -207,6 +207,19 @@ func SimplifyCipherSpec(n *Node) *Node {
 		return n
 	}
 
+	if n.Op == OpReverseBits && n.Next.Op == OpXor && n.Next.Pos == 0 {
+		return SimplifyCipherSpec(&Node{
+			Kind: KindOperation,
+			Op:   OpXor,
+			Arg:  reverseBits(n.Next.Arg),
+			Next: &Node{
+				Kind: KindOperation,
+				Op:   OpReverseBits,
+				Next: n.Next.Next,
+			},
+		})
+	}
+
 	// multiple additions in a row combine
 	if n.Op == OpAddN && n.Next.Op == OpAddN {
 		return SimplifyCipherSpec(&Node{

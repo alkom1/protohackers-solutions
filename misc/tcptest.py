@@ -28,7 +28,7 @@ RESPONSE_WAIT_SECONDS = 5
 CLIENTS = [
 	{
 		"name": "Test",
-		"payload_hex": "01 01 02 00 01 01 04 00 02 2d 03 02 86 02 ab 03 02 00 04 3e 04 62 04 d7 04 a6 04 72 04 71 00",
+		"payload_hex": "04 00 02 00 02 7d 03 02 d7 02 fb 02 1b 02 4a 03 02 e3 02 c7 01 02 5a 02 7e 01 00",
 		"keep_connected": True,
 	},
 ]
