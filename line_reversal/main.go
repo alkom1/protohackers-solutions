@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"strconv"
+	"time"
 )
 
 func main() {
@@ -66,7 +67,7 @@ type LRCPSession struct {
 	recvbuf       []byte
 	sendbuf       []byte
 	sendbufOffset int
-	received      int
+	recvbufOffset int
 }
 
 func (s LRCPSession) sendAck(len int) {
@@ -79,26 +80,70 @@ func (s LRCPSession) sendAck(len int) {
 	}
 }
 
-func (s LRCPSession) sendData(payload string) {
-	// TODO
-	// send data
-	// regularly check if we got ack
-	// if not, resend
-	// there should be max one data goroutine per session
+func (s *LRCPSession) sendData(payload string) {
+	startingPoint := s.sendbufOffset + len(s.sendbuf)
+	msg := MessageData{
+		ID:   s.id,
+		POS:  startingPoint,
+		DATA: payload,
+	}
+	data := []byte(generateResponse(msg))
+	endingPoint := startingPoint + len(payload)
+	s.sendbuf = append(s.sendbuf, data...)
+
+	s.conn.WriteToUDP(data, s.addr)
+	t := time.NewTicker(3 * time.Second)
+	e := time.NewTimer(60 * time.Second)
+	go func() { // resend timer
+		defer t.Stop()
+		defer e.Stop()
+		for {
+			select {
+			case _ = <-t.C:
+				if s.sendbufOffset < endingPoint {
+					s.conn.WriteToUDP(data, s.addr)
+					log.Println("resent")
+				} else {
+					return
+				}
+			case _ = <-e.C:
+				// TODO: close the connection
+				return
+			}
+		}
+	}()
+}
+
+func (s *LRCPSession) Close() {
+	msg := MessageClose{
+		ID: s.id,
+	}
+	data := []byte(generateResponse(msg))
+	s.conn.WriteToUDP(data, s.addr)
+	delete(sessions, s.id)
+}
+
+func (s *LRCPSession) Read(buf []byte) (int, error) {
+	return 0, nil // TODO
+}
+
+func (s *LRCPSession) received() int {
+	return s.recvbufOffset + len(s.recvbuf)
 }
 
 var (
-	sessions = make(map[int]LRCPSession)
+	sessions = make(map[int]*LRCPSession)
 )
 
-func newSession(addr *net.UDPAddr, id int) LRCPSession {
-	s := LRCPSession{
+func newSession(conn *net.UDPConn, addr *net.UDPAddr, id int) *LRCPSession {
+	s := &LRCPSession{
+		conn:          conn,
 		addr:          addr,
 		id:            id,
-		recvbuf:       make([]byte, 0, 1024), // TODO: 10k?
-		sendbuf:       make([]byte, 0, 1024), // TODO: 10k?
+		recvbuf:       make([]byte, 0, 64*1024),
+		sendbuf:       make([]byte, 0, 64*1024),
 		sendbufOffset: 0,
-		received:      0,
+		recvbufOffset: 0,
 	}
 	sessions[id] = s
 	return s
@@ -112,16 +157,24 @@ func handleUdpPacket(conn *net.UDPConn, addr *net.UDPAddr, payload string) {
 	switch m := msg.(type) {
 	case *MessageConnect:
 		if _, exists := sessions[m.ID]; !exists {
-			newSession(addr, m.ID)
+			newSession(conn, addr, m.ID)
 			// TODO: start goroutine
 		}
-		sessions[m.ID].sendAck(sessions[m.ID].received)
+		sessions[m.ID].sendAck(sessions[m.ID].received())
 	case *MessageData:
-		// TODO
+		s := sessions[m.ID]
+		startingPos := m.POS - s.recvbufOffset
+		copy(s.recvbuf[startingPos:], []byte(m.DATA)) // TODO
 	case *MessageAck:
-		// TODO
+		s := sessions[m.ID]
+		if m.LEN <= s.sendbufOffset {
+			break
+		}
+		toCut := m.LEN - s.sendbufOffset
+		s.sendbuf = s.sendbuf[toCut:]
+		s.sendbufOffset = m.LEN
 	case *MessageClose:
-		// TODO
+		sessions[m.ID].Close()
 	}
 }
 
@@ -134,6 +187,7 @@ func sendResponse(conn *net.UDPConn, addr *net.UDPAddr, msg Message) (err error)
 	return
 }
 
+// MESSAGE TYPES
 type Message interface {
 	Type() string
 }
@@ -228,7 +282,7 @@ func generateResponse(msg Message) string {
 	case *MessageConnect:
 		return fmt.Sprintf("/connect/%d/", m.ID)
 	case *MessageData:
-		return fmt.Sprintf("/data/%d/%d/%s/", m.ID, m.POS, m.DATA)
+		return fmt.Sprintf("/data/%d/%d/%s/", m.ID, m.POS, m.DATA) // TODO: escaping
 	case *MessageAck:
 		return fmt.Sprintf("/ack/%d/%d/", m.ID, m.LEN)
 	case *MessageClose:
